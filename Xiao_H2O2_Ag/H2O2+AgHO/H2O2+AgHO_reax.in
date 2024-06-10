@@ -1,0 +1,83 @@
+# H2O2+AgHO with reaxFF for reaction
+
+units           real
+dimension       3
+boundary        p p f
+atom_style      charge
+
+#----------Convert LAMMPS real units to SI units----------
+
+variable        kB equal 1.3806504e-23
+variable        NA equal 6.02214e23
+variable        kcal2J equal 4184
+variable        A02m equal 1.0e-10
+variable        fs2s equal 1.0e-15
+variable        atm2Pa equal 101325
+
+#----------Initial Data settings----------
+
+read_data       50H2O2+2000AgHO_300K.data
+
+#----------Force field parameters----------
+
+# ReaxFF potential for C/H/O/N/Si/Cu/Ag/Zn
+# Lloyd A, Cornil D, Van Duin A C T, et al. Development of a ReaxFF potential for Ag/Zn/O and application to Ag deposition on ZnO[J]. Surface Science, 2016, 645: 67-73.
+# https://doi.org/10.1016/j.susc.2015.11.009
+pair_style      reaxff NULL safezone 120 mincap 5000 minhbonds 2500
+pair_coeff      * * AgZnO.ff H O Ag
+
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check no
+
+#----------Group----------
+region          H2O2 block 3.97750 44.87750 3.97750 44.87750 28 60
+group           H2O2 region H2O2
+region          Ag_fixed block 3.97750 44.87750 3.97750 44.87750 0 5
+group           Ag_fixed region Ag_fixed
+
+#----------Calculations----------
+
+variable        i equal 0
+variable        ransed equal 19930206+${i}
+variable        T equal 300                             # temp in Kelvin
+variable        dtr equal 0.25                          # running data
+variable        si equal 10                             # sample interval
+variable        ci equal 1000                           # correlation interval
+variable        ti equal ${si}*${ci}*10                 # total interval
+variable        Nevery equal 1                          # Nevery
+variable        Nrepeat equal 1                         # Nrepeat
+variable        Nfreq equal ${Nevery}*${Nrepeat}        # Nfreq
+variable        Nevery_ordern equal 1000                # Nevery for fix ordern
+variable        Nbin equal 1000                         # bins for compute rdf
+variable        th equal 100                            # thermo interval
+variable        Tdampb equal ${dtr}*100
+variable        Tdampc equal ${dtr}*100
+
+compute         reax all pair reaxff                    # reaxff energy
+
+#----------Run----------
+
+timestep        ${dtr}
+thermo          ${th}
+thermo_style    custom step temp press ke pe etotal
+
+velocity        H2O2 create ${T} ${ransed} rot yes dist gaussian
+
+# to hold last 3 layers of Ag steady
+velocity        Ag_fixed set 0 0 0
+fix             0 Ag_fixed setforce 0 0 0
+
+# fake wall at z top (combined with fixed boundary)
+fix             top all wall/reflect zhi 60
+
+# final reaction, 300K in 500ps
+fix             1 all nve
+fix             2 all qeq/reax 1 0.0 10.0 1e-6 reaxff
+fix             3 all temp/csvr ${T} ${T} ${Tdampc} ${ransed}
+fix             4 all reaxff/bonds ${th} reaxff_out.bonds
+fix             5 all reaxff/species ${Nevery} ${Nrepeat} ${Nfreq} reaxff_out.species element H O Ag position ${th} reaxff_out.position
+fix             6 all ave/time ${th} 1 ${th} c_reax[*] file 50H2O2+2000AgHO_reax_${T}K_energy.log
+
+dump            1 all atom ${th} 50H2O2+2000AgHO_reax_${T}K.lammpstrj
+
+run             2000000
