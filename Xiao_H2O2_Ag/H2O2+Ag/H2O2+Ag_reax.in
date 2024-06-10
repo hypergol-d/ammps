@@ -16,7 +16,7 @@ variable        atm2Pa equal 101325
 
 #----------Initial Data settings----------
 
-read_data       50H2O2+2000Ag_300K.data
+read_data       50H2O2+2000Ag_1100K.data
 
 #----------Force field parameters----------
 
@@ -36,7 +36,7 @@ group           Ag_fixed region Ag_fixed
 
 #----------Restart----------
 
-restart         100 restart.%d
+restart         2000 restart.%d
 
 #----------Calculations----------
 
